@@ -5,12 +5,32 @@ import { Pool } from 'pg';
 // Next.js typically handles .env.local, .env.development, etc.
 // For non-NEXT_PUBLIC variables, they are only available server-side.
 
+if (!process.env.DATABASE_URL) {
+ console.error('DATABASE_URL is not set');
+ throw new Error('DATABASE_URL is not set');
+}
+
+console.log('Using database connection string:', process.env.DATABASE_URL);
+
 const pool = new Pool({
  connectionString: process.env.DATABASE_URL,
  ssl: {
    rejectUnauthorized: false
  }
 });
+
+// Add connection test on startup
+(async () => {
+ try {
+   const client = await pool.connect();
+   const result = await client.query('SELECT NOW()');
+   console.log('Database connection test successful:', result.rows[0]);
+   client.release();
+ } catch (error) {
+   console.error('Database connection test failed:', error);
+   // Don't throw here as it might prevent the app from starting
+ }
+})();
 
 pool.on('error', (err, client) => {
  console.error('Unexpected error on idle PostgreSQL client', err);
