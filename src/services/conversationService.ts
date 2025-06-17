@@ -1,7 +1,7 @@
 
 'use server';
 
-import { getPostgresPool, testDatabaseConnection } from '@/lib/db';
+import { db, testDatabaseConnection } from '@/lib/db';
 import { PoolClient } from 'pg';
 import type { Language, Message } from '@/lib/types';
 
@@ -161,7 +161,6 @@ export async function linkLeadToConversation(
 export async function getMessagesForConversation(
   conversationDbId: number
 ): Promise<{ messages: Message[]; error?: string }> {
-  const pool = getPostgresPool();
   let client: PoolClient;
   try {
     const isConnected = await testDatabaseConnection();
@@ -169,7 +168,7 @@ export async function getMessagesForConversation(
       return { messages: [], error: 'Database connection failed' };
     }
 
-    client = await pool.connect();
+    client = await db.postgresPool.connect();
     const queryText = `
       SELECT id, conversation_id, sender_type, content, language, timestamp, 
              is_eligibility_result, eligibility_is_eligible, eligibility_details

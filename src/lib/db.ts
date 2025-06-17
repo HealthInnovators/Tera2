@@ -95,7 +95,16 @@ export function getPostgresPool() {
   }
 })();
 
-export default {
+// Export database clients
+export const db = {
   supabase,
   postgresPool
 };
+
+// Add type definitions
+export type DatabaseClients = typeof db;
+
+// Export connection test functions
+export { testDatabaseConnection };
+export { getSupabaseClient };
+export { getPostgresPool };
