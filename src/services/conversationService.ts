@@ -15,16 +15,13 @@ export async function getOrCreateConversation(
   sessionId: string,
   initialLanguage: Language
 ): Promise<{ id: number; error?: string }> {
-  const pool = getPostgresPool();
-  let client: PoolClient;
+  const client = await db.getPostgresPool().connect();
   try {
     // Test database connection first
     const isConnected = await testDatabaseConnection();
     if (!isConnected) {
       return { id: -1, error: 'Database connection failed' };
     }
-
-    client = await pool.connect();
 
     // Check if conversation exists
     const selectQuery = 'SELECT id FROM conversations WHERE session_id = $1';
@@ -92,9 +89,12 @@ export async function addMessageToConversation(
     eligibility?.details || null,
   ];
 
-  let client;
   try {
-    client = await pool.connect();
+    const pool = db.getPostgresPool();
+    if (!pool) {
+      return { success: false, error: 'Database pool not initialized' };
+    }
+    const client = await pool.connect();
     const result = await client.query(queryText, values);
     if (result.rows.length > 0) {
       // Update conversation's last_activity_at
@@ -132,9 +132,12 @@ export async function linkLeadToConversation(
   `;
   const values = [leadId, conversationId];
 
-  let client;
   try {
-    client = await pool.connect();
+    const pool = db.getPostgresPool();
+    if (!pool) {
+      return { success: false, error: 'Database pool not initialized' };
+    }
+    const client = await pool.connect();
     const result = await client.query(queryText, values);
     if (result.rowCount !== null && result.rowCount > 0) {
       return { success: true };
@@ -161,14 +164,17 @@ export async function linkLeadToConversation(
 export async function getMessagesForConversation(
   conversationDbId: number
 ): Promise<{ messages: Message[]; error?: string }> {
-  let client: PoolClient;
   try {
     const isConnected = await testDatabaseConnection();
     if (!isConnected) {
       return { messages: [], error: 'Database connection failed' };
     }
 
-    client = await db.postgresPool.connect();
+    const pool = db.getPostgresPool();
+    if (!pool) {
+      return { messages: [], error: 'Database pool not initialized' };
+    }
+    const client = await pool.connect();
     const queryText = `
       SELECT id, conversation_id, sender_type, content, language, timestamp, 
              is_eligibility_result, eligibility_is_eligible, eligibility_details
@@ -195,9 +201,9 @@ export async function getMessagesForConversation(
     
     return { messages };
   } catch (e: unknown) {
-    console.error('Error retrieving messages from PostgreSQL:', e);
+    console.error('Error in getMessagesForConversation:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
-    return { messages: [], error: `Failed to retrieve messages: ${errorMessage}` };
+    return { messages: [], error: `Failed to fetch messages: ${errorMessage}` };
   } finally {
     if (client) {
       client.release();
