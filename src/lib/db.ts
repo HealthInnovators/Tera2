@@ -1,44 +1,74 @@
 // src/lib/db.ts
 import { createClient } from '@supabase/supabase-js';
+import { Pool } from 'pg';
 
-// Ensure that environment variables are loaded. 
-// Next.js typically handles .env.local, .env.development, etc.
-// For non-NEXT_PUBLIC variables, they are only available server-side.
+// Initialize PostgreSQL pool
+const postgresPool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: {
+    rejectUnauthorized: false // Only for development, should be true in production
+  }
+});
 
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  console.error('Supabase environment variables are not set');
-  throw new Error('Supabase environment variables are not set');
-}
-
-console.log('Using Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-
-// Create Supabase client
+// Initialize Supabase client
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// Export a function to get the client
+// Export functions to get clients
 export function getSupabaseClient() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.error('Missing Supabase environment variables');
+    throw new Error('Missing Supabase environment variables');
+  }
   return supabase;
 }
 
-// Add connection test on startup
+export function getPostgresPool() {
+  if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+    console.error('Missing PostgreSQL environment variables');
+    throw new Error('Missing PostgreSQL environment variables');
+  }
+  return postgresPool;
+}
+
+// Add connection tests
 (async () => {
   try {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .limit(1);
+    // Test PostgreSQL connection
+    if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+      try {
+        await postgresPool.query('SELECT NOW()');
+        console.log('PostgreSQL connection successful');
+      } catch (error) {
+        console.error('PostgreSQL connection failed:', error);
+      }
+    }
 
-    if (error) {
-      console.error('Supabase connection test failed:', error);
-    } else {
-      console.log('Supabase connection test successful');
+    // Test Supabase connection
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      try {
+        const { data, error } = await supabase
+          .from('conversations')
+          .select('*')
+          .limit(1);
+
+        if (error) {
+          console.error('Supabase connection test failed:', error);
+        } else {
+          console.log('Supabase connection test successful');
+        }
+      } catch (error) {
+        console.error('Supabase connection test failed:', error);
+      }
     }
   } catch (error) {
-    console.error('Supabase connection test failed:', error);
+    console.error('Connection test failed:', error);
   }
 })();
 
-export default supabase;
+export default {
+  supabase,
+  postgresPool
+};
