@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    // Force rebuild: 2025-06-17T10:26:54Z
+    // Added @supabase/supabase-js dependency
+    // Fixed next.config.ts configuration
+    // Updated package-lock.json
+    // Fixed SSL certificate handling
     "dev": "next dev --turbopack -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
