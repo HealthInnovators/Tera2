@@ -1,7 +1,8 @@
 
 'use server';
 
-import pool from '@/lib/db';
+import { getPostgresPool, testDatabaseConnection } from '@/lib/db';
+import { PoolClient } from 'pg';
 import type { Language, Message } from '@/lib/types';
 
 /**
@@ -14,8 +15,15 @@ export async function getOrCreateConversation(
   sessionId: string,
   initialLanguage: Language
 ): Promise<{ id: number; error?: string }> {
-  let client;
+  const pool = getPostgresPool();
+  let client: PoolClient;
   try {
+    // Test database connection first
+    const isConnected = await testDatabaseConnection();
+    if (!isConnected) {
+      return { id: -1, error: 'Database connection failed' };
+    }
+
     client = await pool.connect();
 
     // Check if conversation exists
@@ -153,15 +161,22 @@ export async function linkLeadToConversation(
 export async function getMessagesForConversation(
   conversationDbId: number
 ): Promise<{ messages: Message[]; error?: string }> {
-  const queryText = `
-    SELECT id, conversation_id, sender_type, content, language, timestamp, is_eligibility_result, eligibility_is_eligible, eligibility_details
-    FROM messages
-    WHERE conversation_id = $1
-    ORDER BY timestamp ASC;
-  `;
-  let client;
+  const pool = getPostgresPool();
+  let client: PoolClient;
   try {
+    const isConnected = await testDatabaseConnection();
+    if (!isConnected) {
+      return { messages: [], error: 'Database connection failed' };
+    }
+
     client = await pool.connect();
+    const queryText = `
+      SELECT id, conversation_id, sender_type, content, language, timestamp, 
+             is_eligibility_result, eligibility_is_eligible, eligibility_details
+      FROM messages
+      WHERE conversation_id = $1
+      ORDER BY timestamp ASC;
+    `;
     const result = await client.query(queryText, [conversationDbId]);
     
     const messages: Message[] = result.rows.map((row: any) => ({

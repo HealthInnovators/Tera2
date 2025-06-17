@@ -2,14 +2,40 @@
 import { createClient } from '@supabase/supabase-js';
 import { Pool } from 'pg';
 
-// Initialize PostgreSQL pool
+// Initialize PostgreSQL pool with improved SSL configuration
 const postgresPool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
   ssl: {
     rejectUnauthorized: process.env.NODE_ENV === 'development' ? false : true,
-    ca: process.env.POSTGRES_SSL_CA
-  }
+    ca: process.env.POSTGRES_SSL_CA,
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.3'
+  },
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 5000 // Return an error after 5 seconds if connection could not be established
 });
+
+// Test connection on startup
+(async () => {
+  try {
+    await postgresPool.query('SELECT 1');
+    console.log('PostgreSQL connection successful');
+  } catch (error) {
+    console.error('PostgreSQL connection failed:', error);
+  }
+})();
+
+// Add connection test function
+export async function testDatabaseConnection() {
+  try {
+    await postgresPool.query('SELECT 1');
+    return true;
+  } catch (error) {
+    console.error('Database connection test failed:', error);
+    return false;
+  }
+}
 
 // Initialize Supabase client
 const supabase = createClient(
