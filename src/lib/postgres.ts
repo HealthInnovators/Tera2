@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 
 // Create PostgreSQL pool
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
   ssl: {
     rejectUnauthorized: false // Only for development, should be true in production
   }
