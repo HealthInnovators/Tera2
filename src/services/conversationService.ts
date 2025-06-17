@@ -15,37 +15,42 @@ export async function getOrCreateConversation(
   sessionId: string,
   initialLanguage: Language
 ): Promise<{ id: number; error?: string }> {
-  const client = await db.getPostgresPool().connect();
   try {
-    // Test database connection first
-    const isConnected = await testDatabaseConnection();
-    if (!isConnected) {
-      return { id: -1, error: 'Database connection failed' };
+    const pool = await db.getPostgresPool();
+    if (!pool) {
+      return { id: -1, error: 'Database pool not initialized' };
     }
-
-    // Check if conversation exists
-    const selectQuery = 'SELECT id FROM conversations WHERE session_id = $1';
-    const selectResult = await client.query(selectQuery, [sessionId]);
-
-    if (selectResult.rows.length > 0) {
-      // Update last_activity_at
-      const updateQuery = 'UPDATE conversations SET last_activity_at = NOW() WHERE id = $1';
-      await client.query(updateQuery, [selectResult.rows[0].id]);
-      return { id: selectResult.rows[0].id };
-    } else {
-      // Create new conversation
-      const insertQuery = `
-        INSERT INTO conversations (session_id, initial_language, started_at, last_activity_at)
-        VALUES ($1, $2, NOW(), NOW())
-        RETURNING id;
-      `;
-      const insertResult = await client.query(insertQuery, [sessionId, initialLanguage]);
-      if (insertResult.rows.length > 0) {
-        return { id: insertResult.rows[0].id };
-      } else {
-        return { id: -1, error: 'Failed to create conversation.' };
+    const client = await pool.connect();
+    try {
+      // Test database connection first
+      const isConnected = await testDatabaseConnection();
+      if (!isConnected) {
+        return { id: -1, error: 'Database connection failed' };
       }
-    }
+
+      // Check if conversation exists
+      const selectQuery = 'SELECT id FROM conversations WHERE session_id = $1';
+      const selectResult = await client.query(selectQuery, [sessionId]);
+
+      if (selectResult.rows.length > 0) {
+        // Update last_activity_at
+        const updateQuery = 'UPDATE conversations SET last_activity_at = NOW() WHERE id = $1';
+        await client.query(updateQuery, [selectResult.rows[0].id]);
+        return { id: selectResult.rows[0].id };
+      } else {
+        // Create new conversation
+        const insertQuery = `
+          INSERT INTO conversations (session_id, initial_language, started_at, last_activity_at)
+          VALUES ($1, $2, NOW(), NOW())
+          RETURNING id;
+        `;
+        const insertResult = await client.query(insertQuery, [sessionId, initialLanguage]);
+        if (insertResult.rows.length > 0) {
+          return { id: insertResult.rows[0].id };
+        } else {
+          return { id: -1, error: 'Failed to create conversation.' };
+        }
+      }
   } catch (e: unknown) {
     console.error('Error in getOrCreateConversation:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
@@ -65,53 +70,56 @@ export async function getOrCreateConversation(
 export async function addMessageToConversation(
   messageData: Omit<Message, 'id' | 'timestamp' | 'dbId'> & { conversationDbId: number }
 ): Promise<{ success: boolean; messageDbId?: number; error?: string }> {
-  const {
-    conversationDbId,
-    sender,
-    text,
-    language,
-    isEligibilityResult,
-    eligibility,
-  } = messageData;
-
-  const queryText = `
-    INSERT INTO messages (conversation_id, sender_type, content, language, timestamp, is_eligibility_result, eligibility_is_eligible, eligibility_details)
-    VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
-    RETURNING id;
-  `;
-  const values = [
-    conversationDbId,
-    sender,
-    text,
-    language || null,
-    isEligibilityResult || false,
-    eligibility?.isEligible || null,
-    eligibility?.details || null,
-  ];
-
   try {
-    const pool = db.getPostgresPool();
-    if (!pool) {
-      return { success: false, error: 'Database pool not initialized' };
-    }
+    const pool = await db.getPostgresPool();
     const client = await pool.connect();
-    const result = await client.query(queryText, values);
-    if (result.rows.length > 0) {
-      // Update conversation's last_activity_at
-      const updateConvQuery = 'UPDATE conversations SET last_activity_at = NOW() WHERE id = $1';
-      await client.query(updateConvQuery, [conversationDbId]);
-      return { success: true, messageDbId: result.rows[0].id };
-    } else {
-      return { success: false, error: 'Failed to save message. No rows affected.' };
+    try {
+      const {
+        conversationDbId,
+        sender,
+        text,
+        language,
+        isEligibilityResult,
+        eligibility,
+      } = messageData;
+
+      const queryText = `
+        INSERT INTO messages (conversation_id, sender_type, content, language, timestamp, is_eligibility_result, eligibility_is_eligible, eligibility_details)
+        VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
+        RETURNING id;
+      `;
+      const values = [
+        conversationDbId,
+        sender,
+        text,
+        language || null,
+        isEligibilityResult || false,
+        eligibility?.isEligible || null,
+        eligibility?.details || null,
+      ];
+
+      const result = await client.query(queryText, values);
+      if (result.rows.length > 0) {
+        // Update conversation's last_activity_at
+        const updateConvQuery = 'UPDATE conversations SET last_activity_at = NOW() WHERE id = $1';
+        await client.query(updateConvQuery, [conversationDbId]);
+        return { success: true, messageDbId: result.rows[0].id };
+      } else {
+        return { success: false, error: 'Failed to save message. No rows affected.' };
+      }
+    } catch (e: unknown) {
+      console.error('Error saving message to PostgreSQL:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
+      return { success: false, error: `Failed to save message: ${errorMessage}` };
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   } catch (e: unknown) {
-    console.error('Error saving message to PostgreSQL:', e);
+    console.error('Error in addMessageToConversation:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
     return { success: false, error: `Failed to save message: ${errorMessage}` };
-  } finally {
-    if (client) {
-      client.release();
-    }
   }
 }
 
@@ -125,34 +133,37 @@ export async function linkLeadToConversation(
   leadId: number,
   conversationId: number
 ): Promise<{ success: boolean; error?: string }> {
-  const queryText = `
-    UPDATE conversations
-    SET lead_id = $1, last_activity_at = NOW()
-    WHERE id = $2;
-  `;
-  const values = [leadId, conversationId];
-
   try {
-    const pool = db.getPostgresPool();
-    if (!pool) {
-      return { success: false, error: 'Database pool not initialized' };
-    }
+    const pool = await db.getPostgresPool();
     const client = await pool.connect();
-    const result = await client.query(queryText, values);
-    if (result.rowCount !== null && result.rowCount > 0) {
-      return { success: true };
-    } else {
-      // This could happen if conversationId doesn't exist, though unlikely in normal flow
-      return { success: false, error: 'Failed to link lead to conversation. Conversation not found or no rows updated.' };
+    try {
+      const queryText = `
+        UPDATE conversations
+        SET lead_id = $1, last_activity_at = NOW()
+        WHERE id = $2;
+      `;
+      const values = [leadId, conversationId];
+
+      const result = await client.query(queryText, values);
+      if (result.rowCount !== null && result.rowCount > 0) {
+        return { success: true };
+      } else {
+        // This could happen if conversationId doesn't exist, though unlikely in normal flow
+        return { success: false, error: 'Failed to link lead to conversation. Conversation not found or no rows updated.' };
+      }
+    } catch (e: unknown) {
+      console.error('Error linking lead to conversation:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
+      return { success: false, error: `Database error: ${errorMessage}` };
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   } catch (e: unknown) {
-    console.error('Error linking lead to conversation:', e);
+    console.error('Error in linkLeadToConversation:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
     return { success: false, error: `Database error: ${errorMessage}` };
-  } finally {
-    if (client) {
-      client.release();
-    }
   }
 }
 
@@ -165,48 +176,51 @@ export async function getMessagesForConversation(
   conversationDbId: number
 ): Promise<{ messages: Message[]; error?: string }> {
   try {
-    const isConnected = await testDatabaseConnection();
-    if (!isConnected) {
-      return { messages: [], error: 'Database connection failed' };
-    }
-
-    const pool = db.getPostgresPool();
+    const pool = await db.getPostgresPool();
     if (!pool) {
       return { messages: [], error: 'Database pool not initialized' };
     }
     const client = await pool.connect();
-    const queryText = `
-      SELECT id, conversation_id, sender_type, content, language, timestamp, 
-             is_eligibility_result, eligibility_is_eligible, eligibility_details
-      FROM messages
-      WHERE conversation_id = $1
-      ORDER BY timestamp ASC;
-    `;
-    const result = await client.query(queryText, [conversationDbId]);
-    
-    const messages: Message[] = result.rows.map((row: any) => ({
-      id: row.id.toString(), // Client-side unique ID, using dbId for now
-      dbId: row.id,
-      conversationDbId: row.conversation_id,
-      text: row.content,
-      sender: row.sender_type,
-      timestamp: new Date(row.timestamp),
-      language: row.language as Language,
-      isEligibilityResult: row.is_eligibility_result,
-      eligibility: row.is_eligibility_result ? {
-        isEligible: row.eligibility_is_eligible,
-        details: row.eligibility_details,
-      } : undefined,
-    }));
-    
-    return { messages };
+    try {
+      const queryText = `
+        SELECT id, conversation_id, sender_type, content, language, timestamp, 
+               is_eligibility_result, eligibility_is_eligible, eligibility_details
+        FROM messages
+        WHERE conversation_id = $1
+        ORDER BY timestamp ASC;
+      `;
+      const result = await client.query(queryText, [conversationDbId]);
+      
+      const messages = result.rows.map((row: any): Message => ({
+        id: row.id.toString(),
+        dbId: row.id,
+        conversationDbId: row.conversation_id,
+        text: row.content,
+        sender: row.sender_type,
+        timestamp: new Date(row.timestamp),
+        language: row.language as Language,
+        isEligibilityResult: row.is_eligibility_result,
+        eligibility: row.eligibility_is_eligible !== null
+          ? {
+              isEligible: row.eligibility_is_eligible as boolean,
+              details: row.eligibility_details as string
+            }
+          : undefined
+      }));
+      
+      return { messages };
+    } catch (e: unknown) {
+      console.error('Error retrieving messages from PostgreSQL:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
+      return { messages: [], error: `Failed to retrieve messages: ${errorMessage}` };
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
   } catch (e: unknown) {
     console.error('Error in getMessagesForConversation:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown database error.';
-    return { messages: [], error: `Failed to fetch messages: ${errorMessage}` };
-  } finally {
-    if (client) {
-      client.release();
-    }
+    return { messages: [], error: `Failed to retrieve messages: ${errorMessage}` };
   }
 }

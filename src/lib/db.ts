@@ -4,9 +4,15 @@ import { Pool, PoolClient } from 'pg';
 
 // Initialize PostgreSQL pool with improved SSL configuration
 let postgresPool: Pool | null = null;
+let isInitializing = false;
 
 // Initialize database connection
 async function initializeDatabase(): Promise<Pool> {
+  if (isInitializing) {
+    throw new Error('Database initialization is already in progress');
+  }
+
+  isInitializing = true;
   try {
     if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
       console.error('Missing database URL environment variable');
@@ -34,6 +40,8 @@ async function initializeDatabase(): Promise<Pool> {
     console.error('Failed to initialize database:', error);
     postgresPool = null;
     throw error;
+  } finally {
+    isInitializing = false;
   }
 }
 
@@ -42,14 +50,21 @@ async function initializeDatabase(): Promise<Pool> {
   try {
     await initializeDatabase();
   } catch (error) {
-    console.error('Database initialization failed. Application may not function correctly.');
+    console.error('Database initialization failed. Application may not function correctly:', error);
+    throw error; // Re-throw to prevent silent failure
   }
 })();
 
 // Get the database pool with initialization check
-function getPostgresPool(): Pool {
+async function getPostgresPool(): Promise<Pool> {
   if (!postgresPool) {
-    throw new Error('Database not initialized. Please call initializeDatabase() first.');
+    try {
+      console.log('Initializing database connection...');
+      postgresPool = await initializeDatabase();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      throw new Error('Database initialization failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
   }
   return postgresPool;
 }
@@ -63,20 +78,23 @@ const supabase = createClient(
 // Export database clients
 export const db = {
   supabase,
-  getPostgresPool
+  async getPostgresPool() {
+    return await getPostgresPool();
+  }
 };
 
 // Add type definitions
 export type DatabaseClients = typeof db;
 
 // Export connection test functions
-export function testDatabaseConnection(): Promise<boolean> {
+export async function testDatabaseConnection(): Promise<boolean> {
   try {
-    const pool = getPostgresPool();
-    return pool.query('SELECT 1').then(() => true);
+    const pool = await getPostgresPool();
+    await pool.query('SELECT 1');
+    return true;
   } catch (error) {
     console.error('Database connection test failed:', error);
-    return Promise.resolve(false);
+    return false;
   }
 }
 
