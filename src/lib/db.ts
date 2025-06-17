@@ -5,11 +5,9 @@ import { Pool } from 'pg';
 // Initialize PostgreSQL pool
 const postgresPool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.NODE_ENV === 'development' ? {
-    rejectUnauthorized: false
-  } : {
-    rejectUnauthorized: true,
-    ca: process.env.POSTGRES_SSL_CA ? process.env.POSTGRES_SSL_CA : undefined
+  ssl: {
+    rejectUnauthorized: process.env.NODE_ENV === 'development' ? false : true,
+    ca: process.env.POSTGRES_SSL_CA
   }
 });
 
