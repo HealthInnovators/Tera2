@@ -1,21 +1,15 @@
-import { Pool } from 'pg';
+import { getPostgresPool, testDatabaseConnection } from './db';
+import { PoolClient } from 'pg';
 
-// Create PostgreSQL pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: {
-    rejectUnauthorized: false // Only for development, should be true in production
+export async function getDatabaseClient(): Promise<PoolClient> {
+  const pool = getPostgresPool();
+  const isConnected = await testDatabaseConnection();
+  if (!isConnected) {
+    throw new Error('Database connection failed');
   }
-});
+  return await pool.connect();
+}
 
-// Connection test
-(async () => {
-  try {
-    await pool.query('SELECT NOW()');
-    console.log('PostgreSQL connection successful');
-  } catch (error) {
-    console.error('PostgreSQL connection failed:', error);
-  }
-})();
-
-export default pool;
+export async function testConnection(): Promise<boolean> {
+  return await testDatabaseConnection();
+}
