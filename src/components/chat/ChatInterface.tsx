@@ -17,11 +17,28 @@ import { checkServiceEligibility } from '@/ai/flows/service-eligibility-check';
 import { getOrCreateConversation, addMessageToConversation, getMessagesForConversation } from '@/services/conversationService';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from "@/hooks/use-toast";
+<<<<<<< HEAD
 import { Loader2 } from 'lucide-react';
 
 const SESSION_ID_KEY = 'tFiberChatSessionId';
 
 export default function ChatInterface() {
+=======
+import { Loader2, Minus } from 'lucide-react';
+import { DialogTitle } from '@radix-ui/react-dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import pool from '@/lib/db';
+import { PoolClient } from 'pg';
+
+const SESSION_ID_KEY = 'tFiberChatSessionId';
+
+interface ChatInterfaceProps {
+  isMinimized: boolean;
+  onMinimizeChange: (minimized: boolean) => void;
+}
+
+export default function ChatInterface({ isMinimized, onMinimizeChange }: ChatInterfaceProps) {
+>>>>>>> origin/main
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentLanguage, setCurrentLanguage] = useState<Language>('en');
   const [isLoading, setIsLoading] = useState(false); // General loading for AI responses
@@ -38,6 +55,30 @@ export default function ChatInterface() {
     setIsRecording(newState);
   };
 
+<<<<<<< HEAD
+=======
+  
+  // async function getMessages(sessionId: any) {
+  //   let client: PoolClient;
+  //   try {
+  //     client = await pool.connect();
+  //     const selectQuery = 'SELECT * FROM Messages WHERE session_id = $1';
+  //     const result = await client.query(selectQuery, [sessionId]);
+  //     return result.rows;
+  //   } catch (err) {
+  //     console.error('Error fetching messages:', err);
+  //     throw err;
+  //   } finally {
+  //     if (client) {
+  //       client.release();
+  //     }
+  //   }
+  // }
+
+  // const chats =  getMessages(sessionId);
+  // console.log(chats)
+
+>>>>>>> origin/main
   // Helper function to update messages state
   const _addMessageToState = (message: Message) => {
     setMessages(prev => [...prev, message]);
@@ -46,7 +87,20 @@ export default function ChatInterface() {
   // Language change handler
   const handleLanguageChange = (lang: Language) => {
     setCurrentLanguage(lang);
+<<<<<<< HEAD
     setMessages([]); // Clear messages
+=======
+    
+    // Update messages language while preserving text content
+    setMessages(prevMessages => 
+      prevMessages.map(msg => ({
+        ...msg,
+        language: lang,
+        // Preserve the text content as is
+        text: msg.text
+      }))
+    );
+>>>>>>> origin/main
     
     // Reset conversation state
     setConversationDbId(null);
@@ -221,6 +275,7 @@ export default function ChatInterface() {
     const initializeConversation = async (sid: string, lang: Language) => {
       setIsInitializing(true);
       try {
+<<<<<<< HEAD
         const result: GetOrCreateConversationResult = await getOrCreateConversation(sid, lang);
         
         // FIX: Critical bug where initial greeting was not showing.
@@ -254,6 +309,60 @@ export default function ChatInterface() {
         toast({
           title: 'System Error',
           description: 'An unexpected error occurred. Please refresh the page.',
+=======
+        const result = await retryWithBackoff(() => getOrCreateConversation(sid, lang), 3);
+    
+        if (result.id !== -1 && !result.error) {
+          setConversationDbId(result.id);
+    
+          const previousMessages = await retryWithBackoff(() => getMessagesForConversation(result.id), 3);
+          
+          if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
+            // Check if greeting message already exists
+            const hasGreeting = previousMessages.some(msg => 
+              msg.sender === 'bot' && 
+              msg.text === (lang === 'en' ? GREETING_MESSAGE_EN : GREETING_MESSAGE_TE)
+            );
+            
+            if (!hasGreeting) {
+              // Add greeting if it doesn't exist
+              const greetingText = lang === 'en' ? GREETING_MESSAGE_EN : GREETING_MESSAGE_TE;
+              const greetingMessage: Message = {
+                id: uuidv4(),
+                text: greetingText,
+                sender: 'bot',
+                timestamp: new Date(),
+                language: lang,
+                conversationDbId: result.id,
+              };
+              previousMessages.unshift(greetingMessage);
+              setMessages(previousMessages);
+              await retryWithBackoff(() => saveMessageToDB(greetingMessage), 3);
+            } else {
+              // Just set the existing messages
+              setMessages(previousMessages);
+            }
+          } else {
+            // First time initialization - always add greeting
+            const greetingText = lang === 'en' ? GREETING_MESSAGE_EN : GREETING_MESSAGE_TE;
+            const greetingMessage: Message = {
+              id: uuidv4(),
+              text: greetingText,
+              sender: 'bot',
+              timestamp: new Date(),
+              language: lang,
+              conversationDbId: result.id,
+            };
+            setMessages([greetingMessage]);
+            await retryWithBackoff(() => saveMessageToDB(greetingMessage), 3);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing conversation:', error);
+        toast({
+          title: 'Service Temporarily Unavailable',
+          description: 'The chat service is temporarily overloaded. Please try again in a few minutes.',
+>>>>>>> origin/main
           variant: 'destructive',
         });
       } finally {
@@ -261,15 +370,58 @@ export default function ChatInterface() {
       }
     };
 
+<<<<<<< HEAD
+=======
+    const retryWithBackoff = async (fn: () => Promise<any>, maxRetries: number = 3) => {
+      let retries = 0;
+      const baseDelay = 1000; // 1 second
+
+      while (retries < maxRetries) {
+        try {
+          return await fn();
+        } catch (error) {
+          retries++;
+          if (retries === maxRetries) {
+            throw error;
+          }
+          
+          const delay = baseDelay * Math.pow(2, retries);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    };
+
+>>>>>>> origin/main
     if (storedSessionId) {
       initializeConversation(storedSessionId, currentLanguage);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
 
+<<<<<<< HEAD
   // FIX: Removed redundant and inefficient useEffect that was here.
 
   // Effect for auto-scrolling
+=======
+  const saveMessageToDB = async (message: any) => {
+    try {
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(message),
+      });
+    } catch (err) {
+      console.error("Error saving message to DB", err);
+    }
+  };
+
+  // FIX: Removed redundant and inefficient useEffect that was here.
+
+  // Effect for auto-scrolling
+  
+>>>>>>> origin/main
   useEffect(() => {
     // NOTE: This scrolling logic depends on the internal DOM structure of the
     // ScrollArea component (data-radix-scroll-area-viewport). If the library
@@ -283,12 +435,30 @@ export default function ChatInterface() {
   }, [messages]);
 
   return (
+<<<<<<< HEAD
     <div className="flex flex-col h-full bg-white rounded-xl overflow-hidden w-[550px] mx-auto border-0">
       <header className="p-4 bg-blue-600 text-white flex items-center gap-4">
         <img src="/images/tera-icon.png" alt="TeRA Logo" className="w-10 h-10 rounded-full" />
         <div className="flex items-center">
           <span className="text-xl font-headline">Ask TeRA - Telangana Rising Agent</span>
         </div>
+=======
+    <div className={`flex flex-col h-full bg-white rounded-xl overflow-hidden w-[550px] mx-auto border-0 ${isMinimized ? 'min-h-[100px]' : ''}`}>
+      <header className="p-4 bg-blue-600 text-white flex items-center justify-between gap-4">
+        <img src="/images/tera-icon.png" alt="TeRA Logo" className="w-10 h-10 rounded-full" />
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-headline">Ask TeRA - Telangana Rising Agent</span>
+        </div>
+        <button
+          onClick={() => {
+            onMinimizeChange(!isMinimized);
+          }}
+          className="p-2 rounded-full hover:bg-blue-500 transition-colors"
+          title="Minimize Chat"
+        >
+          <Minus className="w-5 h-5" />
+        </button>
+>>>>>>> origin/main
       </header>
       <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
         <div className="space-y-4">

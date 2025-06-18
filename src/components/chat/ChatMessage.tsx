@@ -6,7 +6,11 @@ import { User } from 'lucide-react';
 import TeraAvatar from '@/components/icons/TeraAvatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+<<<<<<< HEAD
 
+=======
+import { TERA_ICON } from '@/lib/constants'; //this image path varialbe's varialbe
+>>>>>>> origin/main
 // In ChatMessage.tsx
 const botIcon = (
   <div className="flex items-center justify-center w-8 h-8">
@@ -33,7 +37,11 @@ export default function ChatMessage({ message }: ChatMessageProps) {
               <User size={24} />
             </AvatarFallback>
           ) : (
+<<<<<<< HEAD
             <AvatarImage src="/images/tera-icon.png" className="rounded-full" />
+=======
+            <AvatarImage src={TERA_ICON} className="rounded-full" />
+>>>>>>> origin/main
           )}
         </Avatar>
         <div

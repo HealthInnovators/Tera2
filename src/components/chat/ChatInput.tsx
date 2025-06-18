@@ -19,6 +19,7 @@ interface SpeechRecognitionEvent extends Event {
   readonly results: SpeechRecognitionResultList;
 }
 
+<<<<<<< HEAD
 interface SpeechRecognition {
   lang: string;
   onresult: (event: SpeechRecognitionEvent) => void;
@@ -38,6 +39,17 @@ interface ChatInputProps {
   isRecording: boolean;
   setIsRecording: (newState: boolean) => void;
   leadCaptureField?: string;
+=======
+interface ChatInputProps {
+  onSendMessage: (text: string) => void;        // Called when a message is submitted
+  currentLanguage: Language;                    // 'en' or 'te' for English or Telugu
+  onLanguageChange: (lang: Language) => void;   // Function to switch language
+  isSending: boolean;                           // Indicates if a message is being sent (for disabling input)
+  isCapturingLead: boolean;                     // Used to disable mic during lead capture phase
+  isRecording: boolean;                         // Indicates if voice recognition is ongoing
+  setIsRecording: (newState: boolean) => void;  // Function to toggle voice recognition
+  leadCaptureField?: string;                    // Optional field for capturing leads
+>>>>>>> origin/main
 }
 
 export default function ChatInput({
@@ -50,7 +62,11 @@ export default function ChatInput({
   setIsRecording,
 }: ChatInputProps) {
   const [inputValue, setInputValue] = useState('');
+<<<<<<< HEAD
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+=======
+  const recognitionRef = useRef<any>(null);
+>>>>>>> origin/main
   const { toast } = useToast();
 
   useEffect(() => {
@@ -89,11 +105,19 @@ export default function ChatInput({
         
         if (lastResult.isFinal) {
           const finalTranscript = transcript.trim();
+<<<<<<< HEAD
           setInputValue(finalTranscript);
           onSendMessage(finalTranscript);
           setIsRecording(false); // Stop after successful recognition
         } else {
           setInputValue(transcript);
+=======
+          setInputValue('');                      // <-- CLEAR the input field
+          onSendMessage(finalTranscript);         
+          setIsRecording(false);                 
+        } else {
+          setInputValue(transcript);              // interim results (live display)
+>>>>>>> origin/main
         }
       };
 
@@ -271,4 +295,8 @@ export default function ChatInput({
       </Button>
     </form>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/main
